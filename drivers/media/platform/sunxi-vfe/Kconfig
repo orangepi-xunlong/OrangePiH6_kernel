@@ -1,0 +1,8 @@
+
+config CSI_VFE
+	tristate "v4l2 driver for SUNXI"
+	default m
+
+config VIDEOBUF2_DMA_CONTIG
+  tristate "VIDEOBUF2_DMA_CONTIG"
+  default m

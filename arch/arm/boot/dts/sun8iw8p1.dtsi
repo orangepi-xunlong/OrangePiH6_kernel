@@ -1,0 +1,131 @@
+/*
+ * Allwinner Technology CO., Ltd. sun8iw8p1 platform .dtsi
+ * modified by czy
+ * modify base on juno.dts & sun8iw10
+ */
+
+/memreserve/ 0x43000000 0x00020000; /* sys_config range        : [0x43000000~0x43020000], size = 128K  */
+/memreserve/ 0x43080000 0x00000800; /* super standby range        : [0x43080000~0x43080800], size = 2K  */
+
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+#include "sun8iw8p1-clk.dtsi"
+#include "sun8iw8p1-pinctrl.dtsi"
+/{
+	model = "sun8iw8p1";
+	compatible = "arm,sun8iw8p1";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart0;
+		serial1 = &uart1;
+		global_timer0  = &soc_timer0;
+	};
+
+	chosen {
+		bootargs = "earlyprintk=sunxi-uart,0x01c28000 loglevel=8 initcall_debug=1 console=ttyS0 init=/init";
+		linux,initrd-start = <0x0 0x0>;
+		linux,initrd-end = <0x0 0x0>;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <0x0>;
+		};
+	};
+
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x00000000 0x40000000 0x00000000 0x4000000>;  /*  64M*/
+	};
+
+	gic: interrupt-controller@01c81000 {
+		compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
+		#interrupt-cells = <3>;
+		#address-cells = <0>;
+		device_type = "gic";
+		interrupt-controller;
+		reg = <0x0 0x01c81000 0 0x1000>,/*GIC Dist*/
+		      <0x0 0x01c82000 0 0x2000>,/*GIC CPU*/
+		      <0x0 0x01c84000 0 0x2000>,/*GIC VCPU Control*/
+		      <0x0 0x01c86000 0 0x2000>;/*GIC VCPU*/
+		interrupts = <GIC_PPI 9 0xf04>;/*GIC Maintenence IRQ*/
+
+	};
+
+	wdt: watchdog@01c20ca0 {
+		 compatible = "allwinner,sun4i-wdt";
+		 reg = <0x0 0x01c20ca0 0 0x18>;
+	 };
+
+	soc: soc@01c00000 {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		device_type = "soc";
+		ranges;
+
+		dma0:dma-controller@01c02000 {
+			compatible = "allwinner,sun50i-dma";
+			reg = <0x0 0x01c02000 0x0 0x1000>;
+			interrupts = <0 50 4>;
+			clocks = <&clk_dma>;
+			#dma-cells = <1>;
+		};
+
+		soc_timer0: timer@01c20c00 {
+			compatible = "allwinner,sunxi-timer";
+			device_type = "timer";
+			reg = <0x0 0x01c20c00 0x0 0x400>;
+			clock-frequency = <24000000>;
+			timer-prescale = <16>;
+			interrupts = <GIC_SPI 18 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		rtc: rtc@01c20400 {
+			compatible = "allwinner,sun8iw5-rtc";
+			device_type = "rtc";
+			reg = <0x0 0x01c20400 0x0 0x218>;
+			interrupts = <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		uart0: uart@01c28000 {
+			compatible = "allwinner,sun8i-uart";
+			device_type = "uart0";
+			reg = <0x0 0x01c28000 0x0 0x400>;
+			interrupts = <GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_uart0>;
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&uart0_pins_a>;
+			pinctrl-1 = <&uart0_pins_b>;
+			uart0_port = <0>;
+			uart0_type = <2>;
+			/*status = "okay";*/
+			status = "disabled";
+		};
+
+		uart1: uart@01c28400 {
+			compatible = "allwinner,sun8i-uart";
+			device_type = "uart1";
+			reg = <0x0 0x01c28400 0x0 0x400>;
+			interrupts = <GIC_SPI 1 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk_uart1>;
+			pinctrl-names = "default", "sleep";
+			pinctrl-0 = <&uart1_pins_a>;
+			pinctrl-1 = <&uart1_pins_b>;
+			uart1_port = <1>;
+			uart1_type = <2>;
+			/*status = "disabled";*/
+			status = "okay";
+		};
+	};
+};
