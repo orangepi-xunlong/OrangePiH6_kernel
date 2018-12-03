@@ -100,3 +100,4 @@ bImage
 rootfs.cpio.gz
 drivers/arisc/binary/arisc
 modules/eurasia_km/eurasiacon/binary2_sunxi_android_release/
+drivers/gator/gator_src_md5.h
