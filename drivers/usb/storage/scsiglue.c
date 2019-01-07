@@ -569,7 +569,7 @@ struct scsi_host_template usb_stor_host_template = {
 	.sg_tablesize =			SCSI_MAX_SG_CHAIN_SEGMENTS,
 
 	/* limit the total size of a transfer to 120 KB */
-	.max_sectors =                  240,
+	.max_sectors =                  2048,
 
 	/* merge commands... this seems to help performance, but
 	 * periodically someone should test to see which setting is more
