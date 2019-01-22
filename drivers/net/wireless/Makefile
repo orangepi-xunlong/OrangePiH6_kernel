@@ -32,6 +32,7 @@ obj-$(CONFIG_RTL8188EU)         += rtl8188eu/
 obj-$(CONFIG_RTL8192EU)         += rtl8192eu/
 obj-$(CONFIG_RTL8723BU)         += rtl8723bu/
 obj-$(CONFIG_RTL8822BS)         += rtl8822bs/
+obj-$(CONFIG_RTL8822BE)         += rtl8822be/
 obj-$(CONFIG_QCA_CLD_WLAN)      += Qualcomm/
 # 16-bit wireless PCMCIA client drivers
 obj-$(CONFIG_PCMCIA_RAYCS)	+= ray_cs.o
