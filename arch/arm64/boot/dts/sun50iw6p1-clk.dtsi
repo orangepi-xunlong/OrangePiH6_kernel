@@ -598,6 +598,16 @@ clocks {
 			compatible = "allwinner,sunxi-periph-clock";
 			clock-output-names = "pcie_bus";
 		};
+		clk_pcie_power: pcie_power {
+			#clock-cells = <0>;
+			compatible = "allwinner,sunxi-periph-clock";
+			clock-output-names = "pcie_power";
+		};
+		clk_pcie_rst: pcie_rst {
+			#clock-cells = <0>;
+			compatible = "allwinner,sunxi-periph-clock";
+			clock-output-names = "pcie_rst";
+		};
 		clk_hdmi: hdmi {
 			#clock-cells = <0>;
 			compatible = "allwinner,sunxi-periph-clock";

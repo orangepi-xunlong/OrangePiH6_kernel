@@ -1048,7 +1048,7 @@
 			device_type = "pci";
 			ranges = <0x00000800 0 0x05410000 0 0x05410000 0 0x00010000 /* configuration space */
 				  0x81000000 0 0          0 0x05600000 0 0x00010000 /* downstream I/O */
-				  0x82000000 0 0x05500000 0 0x05500000 0 0x00100000>; /* non-prefetchable memory */
+				  0x82000000 0 0x50100000 0 0x05500000 0 0x00800000>; /* non-prefetchable memory */
 			num-lanes = <1>;
 			interrupts = <GIC_SPI 127 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 126 IRQ_TYPE_LEVEL_HIGH>;
@@ -1056,7 +1056,9 @@
 			clocks = <&clk_pcieref>,
 			         <&clk_pciemaxi>,
 				 <&clk_pcieaux>,
-				 <&clk_pcie_bus>;
+				 <&clk_pcie_bus>,
+				 <&clk_pcie_power>,
+				 <&clk_pcie_rst>;
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 0>;
 			interrupt-map = <0 0 0 1 &gic GIC_SPI 127 IRQ_TYPE_LEVEL_HIGH>;
@@ -1241,10 +1243,11 @@
 			reg = <0x0 0x06000000 0x0 0x100000>;
 			interrupts = <GIC_SPI 64 IRQ_TYPE_NONE>;
 			clocks = <&clk_hdmi>,<&clk_hdmi_slow>,<&clk_hdmi_hdcp>,<&clk_hdmi_cec>;
-			pinctrl-names = "ddc_active","sleep","cec_active";
+			pinctrl-names = "ddc_active","ddc_sleep","cec_active", "cec_sleep";
 			pinctrl-0 = <&hdmi_ddc_pin_a>;
-			pinctrl-1 = <&hdmi_ddc_cec_pin_b>;
+			pinctrl-1 = <&hdmi_ddc_pin_b>;
 			pinctrl-2 = <&hdmi_cec_pin_a>;
+			pinctrl-3 = <&hdmi_cec_pin_b>;
 			status = "okay";
 		};
 
@@ -1713,6 +1716,7 @@
 			reg = <0x0 0x05060000 0x0 0x1000>;
 			interrupts = <GIC_SPI 14 4>;
 			clocks = <&clk_pll_periph0>,<&clk_ts>;
+			clock-frequency = <120000000>;
 			pinctrl-names = "ts0-default","ts1-default",
 					"ts2-default","ts3-default",
 					"ts0-sleep","ts1-sleep",
@@ -1800,7 +1804,7 @@
 
 				trips{
 					cpu_trip0:t0{
-						temperature = <70>;
+						temperature = <60>;
 						type = "passive";
 						hysteresis = <0>;
 					};

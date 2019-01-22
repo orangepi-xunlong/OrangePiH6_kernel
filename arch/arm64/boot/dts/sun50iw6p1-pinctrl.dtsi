@@ -716,8 +716,8 @@
 				allwinner,pull = <0>;
 			};
 
-			hdmi_ddc_cec_pin_b: hdmi@1 {
-				allwinner,pins = "PH8","PH9","PH10";
+			hdmi_ddc_pin_b: hdmi@1 {
+				allwinner,pins = "PH8","PH9";
 				allwinner,function = "io_disabled";
 				allwinner,muxsel = <7>;
 				allwinner,drive = <1>;
@@ -728,6 +728,14 @@
 				allwinner,pins = "PH10";
 				allwinner,function = "cec0";
 				allwinner,muxsel = <2>;
+				allwinner,drive = <1>;
+				allwinner,pull = <0>;
+			};
+
+			hdmi_cec_pin_b: hdmi@3 {
+				allwinner,pins = "PH10";
+				allwinner,function = "io_disabled";
+				allwinner,muxsel = <7>;
 				allwinner,drive = <1>;
 				allwinner,pull = <0>;
 			};

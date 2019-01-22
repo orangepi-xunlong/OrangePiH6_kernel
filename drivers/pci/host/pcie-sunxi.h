@@ -37,6 +37,13 @@ struct pcie_port_info {
 #define LINK_WAIT_MAX_RETRIES		10
 #define LINK_WAIT_USLEEP_MIN		90000
 #define LINK_WAIT_USLEEP_MAX		100000
+
+#define PCIE_MSI_ADDR_LO		0x820
+#define PCIE_MSI_ADDR_HI		0x824
+#define PCIE_MSI_INTR0_ENABLE		0x828
+#define PCIE_MSI_INTR0_MASK		0x82C
+#define PCIE_MSI_INTR0_STATUS		0x830
+
 struct pcie_port {
 	struct device		*dev;
 	u8			root_bus_nr;
@@ -78,5 +85,7 @@ void sunxi_pcie_msi_init(struct pcie_port *pp);
 int sunxi_pcie_link_up(struct pcie_port *pp);
 void sunxi_pcie_setup_rc(struct pcie_port *pp);
 int sunxi_pcie_host_init(struct pcie_port *pp);
+int sunxi_pcie_wr_own_conf(struct pcie_port *pp, int where, int size, u32 val);
+int sunxi_pcie_rd_own_conf(struct pcie_port *pp, int where, int size, u32 *val);
 
 #endif /* _PCIE_SUNXI_H */

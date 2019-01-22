@@ -38,12 +38,6 @@
 #define PORT_LOGIC_LINK_WIDTH_2_LANES		(0x2 << 8)
 #define PORT_LOGIC_LINK_WIDTH_4_LANES		(0x4 << 8)
 
-#define PCIE_MSI_ADDR_LO			0x820
-#define PCIE_MSI_ADDR_HI			0x824
-#define PCIE_MSI_INTR0_ENABLE			0x828
-#define PCIE_MSI_INTR0_MASK			0x82C
-#define PCIE_MSI_INTR0_STATUS			0x830
-
 #define PCIE_ATU_VIEWPORT			0x900
 #define PCIE_ATU_REGION_INBOUND			(0x1 << 31)
 #define PCIE_ATU_REGION_OUTBOUND		(0x0 << 31)
@@ -69,8 +63,14 @@
 #define PCIE_TYPE1_CLASS_CODE_REV_ID_REG	0x08
 
 #define PCIE_ADDR_PAGE_CFG			0x1020
+#define PCIE_AWMISC_CTRL			0x1030
+#define PCIE_ARMISC_CTRL			0x1034
+#define PCIE_PAGE				0x10000
 
 static struct hw_pci sunxi_pci;
+
+static void __iomem *dbi_base;
+static void __iomem *mem_base_start;
 
 static unsigned long global_io_offset;
 
@@ -123,7 +123,7 @@ static inline void sunxi_pcie_writel_rc(struct pcie_port *pp, u32 val, u32 reg)
 		writel(val, pp->dbi_base + reg);
 }
 
-static int sunxi_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
+int sunxi_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 			       u32 *val)
 {
 	int ret;
@@ -137,7 +137,7 @@ static int sunxi_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 	return ret;
 }
 
-static int sunxi_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
+int sunxi_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 			       u32 val)
 {
 	int ret;
@@ -189,12 +189,15 @@ irqreturn_t sunxi_handle_msi_irq(struct pcie_port *pp)
 
 void sunxi_pcie_msi_init(struct pcie_port *pp)
 {
+	u64 msi_target;
+
 	pp->msi_data = __get_free_pages(GFP_KERNEL, 0);
+	msi_target = virt_to_phys((void *)pp->msi_data);
 
 	/* program the msi_data */
 	sunxi_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_LO, 4,
-			virt_to_phys((void *)pp->msi_data));
-	sunxi_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_HI, 4, 0);
+			(u32)(msi_target & 0xffffffff));
+	sunxi_pcie_wr_own_conf(pp, PCIE_MSI_ADDR_HI, 4, (u32)(msi_target >> 32 & 0xffffffff));
 }
 
 static int find_valid_pos0(struct pcie_port *pp, int msgvec, int pos, int *pos0)
@@ -332,6 +335,7 @@ static int sunxi_msi_setup_irq(struct msi_chip *chip, struct pci_dev *pdev,
 	int irq, pos, msgvec;
 	u16 msg_ctr;
 	struct msi_msg msg;
+	u64 msi_target;
 	struct pcie_port *pp = sys_to_pcie(pdev->bus->sysdata);
 
 	if (!pp) {
@@ -357,8 +361,9 @@ static int sunxi_msi_setup_irq(struct msi_chip *chip, struct pci_dev *pdev,
 	 */
 	desc->msi_attrib.multiple = msgvec;
 
-	msg.address_lo = virt_to_phys((void *)pp->msi_data);
-	msg.address_hi = 0x0;
+	msi_target = virt_to_phys((void *)pp->msi_data);
+	msg.address_lo = (u32)(msi_target & 0xffffffff);
+	msg.address_hi = (u32)(msi_target >> 32 & 0xffffffff);
 	msg.data = pos;
 	write_msi_msg(irq, &msg);
 
@@ -448,13 +453,15 @@ int __init sunxi_pcie_host_init(struct pcie_port *pp)
 			return -ENOMEM;
 		}
 	}
-
+	dbi_base = pp->dbi_base;
 	pp->cfg0_base = pp->cfg.start;
 /*	pp->cfg1_base = pp->cfg.start + pp->config.cfg0_size; */
 	pp->mem_base = pp->mem.start;
 
-	pp->va_cfg0_base = devm_ioremap(pp->dev, pp->cfg0_base,
+	pp->va_cfg0_base = ioremap(pp->cfg0_base,
 					pp->config.cfg0_size);
+	mem_base_start = pp->va_cfg0_base;
+
 	if (!pp->va_cfg0_base) {
 		dev_err(pp->dev, "error with ioremap in function\n");
 		return -ENOMEM;
@@ -509,6 +516,7 @@ int __init sunxi_pcie_host_init(struct pcie_port *pp)
 	return 0;
 }
 
+#ifndef CONFIG_ARCH_SUN50IW6
 static void sunxi_pcie_prog_viewport_cfg0(struct pcie_port *pp, u32 busdev)
 {
 	/* Program viewport 0 : OUTBOUND : CFG0 */
@@ -570,28 +578,48 @@ static void sunxi_pcie_prog_viewport_io_outbound(struct pcie_port *pp)
 			  PCIE_ATU_UPPER_TARGET);
 	sunxi_pcie_writel_rc(pp, PCIE_ATU_ENABLE, PCIE_ATU_CR2);
 }
+#endif
 
 static int sunxi_pcie_rd_other_conf(struct pcie_port *pp, struct pci_bus *bus,
 		u32 devfn, int where, int size, u32 *val)
 {
 	int ret = PCIBIOS_SUCCESSFUL;
 	u32 address, busdev;
+#ifdef CONFIG_ARCH_SUN50IW6
+	int i;
+	u32 pcie_page;
+#endif
 
-	busdev = PCIE_ATU_BUS(bus->number) | PCIE_ATU_DEV(PCI_SLOT(devfn)) |
-		 PCIE_ATU_FUNC(PCI_FUNC(devfn));
+	busdev = PCIE_ATU_BUS(bus->number) | PCIE_ATU_DEV(PCI_SLOT(devfn)) | PCIE_ATU_FUNC(PCI_FUNC(devfn));
 	address = where & ~0x3;
 
 	if (bus->parent->number == pp->root_bus_nr) {
-		sunxi_pcie_writel_rc(pp, (pp->cfg0_base >> 16), PCIE_ADDR_PAGE_CFG);
+#ifdef CONFIG_ARCH_SUN50IW6
+		sunxi_pcie_writel_rc(pp, busdev >> 16, PCIE_ADDR_PAGE_CFG);
+		sunxi_pcie_writel_rc(pp, 0x4, PCIE_AWMISC_CTRL);
+		sunxi_pcie_writel_rc(pp, 0x4, PCIE_ARMISC_CTRL);
+		ret = sunxi_pcie_cfg_read(pp->va_cfg0_base + address, where, size, val);
+		for (i = 0; i < 6; i++) {
+			pcie_page = readl(pp->va_cfg0_base + PCI_BASE_ADDRESS_0 + i * 4);
+			if (pcie_page & 0x4)
+				break;
+		}
+		sunxi_pcie_writel_rc(pp, (pcie_page >> 16), PCIE_ADDR_PAGE_CFG);
+		sunxi_pcie_writel_rc(pp, 0, PCIE_AWMISC_CTRL);
+		sunxi_pcie_writel_rc(pp, 0, PCIE_ARMISC_CTRL);
+#else
 		sunxi_pcie_prog_viewport_cfg0(pp, busdev);
 		ret = sunxi_pcie_cfg_read(pp->va_cfg0_base + address, where, size, val);
 		sunxi_pcie_prog_viewport_mem_outbound(pp);
+#endif
 	} else {
+#ifndef CONFIG_ARCH_SUN50IW6
 		sunxi_pcie_writel_rc(pp, (pp->cfg0_base >> 16), PCIE_ADDR_PAGE_CFG);
 		sunxi_pcie_prog_viewport_cfg1(pp, busdev);
 		ret = sunxi_pcie_cfg_read(pp->va_cfg1_base + address, where, size,
 				val);
 		sunxi_pcie_prog_viewport_io_outbound(pp);
+#endif
 	}
 
 	return ret;
@@ -602,24 +630,43 @@ static int sunxi_pcie_wr_other_conf(struct pcie_port *pp, struct pci_bus *bus,
 {
 	int ret = PCIBIOS_SUCCESSFUL;
 	u32 address, busdev;
+#ifdef CONFIG_ARCH_SUN50IW6
+	int i;
+	u32 pcie_page;
+#endif
 
 	busdev = PCIE_ATU_BUS(bus->number) | PCIE_ATU_DEV(PCI_SLOT(devfn)) |
 		 PCIE_ATU_FUNC(PCI_FUNC(devfn));
 	address = where & ~0x3;
 
 	if (bus->parent->number == pp->root_bus_nr) {
-		sunxi_pcie_writel_rc(pp, (pp->cfg0_base >> 16), PCIE_ADDR_PAGE_CFG);
+#ifdef CONFIG_ARCH_SUN50IW6
+		sunxi_pcie_writel_rc(pp, busdev >> 16, PCIE_ADDR_PAGE_CFG);
+		sunxi_pcie_writel_rc(pp, 0x4, PCIE_AWMISC_CTRL);
+		sunxi_pcie_writel_rc(pp, 0x4, PCIE_ARMISC_CTRL);
+		ret = sunxi_pcie_cfg_write(pp->va_cfg0_base + address, where, size, val);
+		for (i = 0; i < 6; i++) {
+			pcie_page = readl(pp->va_cfg0_base + PCI_BASE_ADDRESS_0 + i * 4);
+			if (pcie_page & 0x4)
+				break;
+		}
+		sunxi_pcie_writel_rc(pp, (pcie_page >> 16), PCIE_ADDR_PAGE_CFG);
+		sunxi_pcie_writel_rc(pp, 0, PCIE_AWMISC_CTRL);
+		sunxi_pcie_writel_rc(pp, 0, PCIE_ARMISC_CTRL);
+#else
 		sunxi_pcie_prog_viewport_cfg0(pp, busdev);
-		ret = sunxi_pcie_cfg_write(pp->va_cfg0_base + address, where, size,
-				val);
+		ret = sunxi_pcie_cfg_write(pp->va_cfg0_base + address, where, size, val);
 		sunxi_pcie_prog_viewport_mem_outbound(pp);
+#endif
 	} else {
+#ifndef CONFIG_ARCH_SUN50IW6
 		sunxi_pcie_writel_rc(pp, (pp->cfg0_base >> 16), PCIE_ADDR_PAGE_CFG);
 		sunxi_pcie_prog_viewport_cfg1(pp, busdev);
 		ret = sunxi_pcie_cfg_write(pp->va_cfg1_base + address, where, size,
 				val);
 		sunxi_pcie_writel_rc(pp, (pp->cfg0_base >> 16), PCIE_ADDR_PAGE_CFG);
 		sunxi_pcie_prog_viewport_io_outbound(pp);
+#endif
 	}
 
 	return ret;
@@ -699,6 +746,48 @@ static struct pci_ops sunxi_pcie_ops = {
 	.read = sunxi_pcie_rd_conf,
 	.write = sunxi_pcie_wr_conf,
 };
+
+#ifdef CONFIG_ARCH_SUN50IW6
+static inline bool pcie_compare(u32 b, u32 a, u32 c)
+{
+	return ((b >= a) && (b <= (a + c)));
+}
+
+struct pci_page sunxi_pcie_bus_cutpage_config(struct pci_dev *dev, int barnum, unsigned long offset)
+{
+	u32 bar_base, page_base, cutpage;
+	struct pci_page sunxi_page;
+	unsigned long size;
+	int page_num = 0;
+
+	size = pci_resource_len(dev, barnum);
+	sunxi_page.mem_base = mem_base_start;
+	page_base = readl(dbi_base + PCIE_ADDR_PAGE_CFG);
+	page_base = page_base << 16;
+	pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + barnum * 4, &bar_base);
+	bar_base = bar_base & 0xffff0000;
+	if (!pcie_compare(page_base, bar_base, size)) {
+		page_base = bar_base;
+		writel(page_base >> 16, dbi_base + PCIE_ADDR_PAGE_CFG);
+	}
+
+	while (offset > (PCIE_PAGE - 1)) {
+		offset = offset - PCIE_PAGE;
+		page_num++;
+	}
+
+	cutpage = bar_base + PCIE_PAGE * page_num;
+	sunxi_page.offset = offset;
+	if (!pcie_compare(cutpage, bar_base, size)) {
+		cutpage = bar_base;
+		writel(cutpage >> 16, dbi_base + PCIE_ADDR_PAGE_CFG);
+	}
+	writel(cutpage >> 16, dbi_base + PCIE_ADDR_PAGE_CFG);
+
+	return sunxi_page;
+}
+EXPORT_SYMBOL(sunxi_pcie_bus_cutpage_config);
+#endif
 
 static int sunxi_pcie_setup(int nr, struct pci_sys_data *sys)
 {
@@ -831,8 +920,8 @@ void sunxi_pcie_setup_rc(struct pcie_port *pp)
 	sunxi_pcie_writel_rc(pp, val, PCI_PRIMARY_BUS);
 
 	/* setup memory base, memory limit */
-	membase = ((u32)pp->mem_base & 0xfff00000) >> 16;
-	memlimit = (config->mem_size + (u32)pp->mem_base) & 0xfff00000;
+	membase = ((u32)pp->config.mem_bus_addr & 0xfff00000) >> 16;
+	memlimit = (config->mem_size + (u32)pp->config.mem_bus_addr) & 0xfff00000;
 	val = memlimit | membase;
 	sunxi_pcie_writel_rc(pp, val, PCI_MEMORY_BASE);
 	sunxi_pcie_readl_rc(pp, PCI_MEMORY_BASE, &val);
