@@ -19,3 +19,4 @@ obj-$(CONFIG_PWM_TWL_LED)	+= pwm-twl-led.o
 obj-$(CONFIG_PWM_VT8500)	+= pwm-vt8500.o
 obj-$(CONFIG_PWM_SUNXI)	    += pwm-sunxi.o
 obj-$(CONFIG_PWM_SUNXI_NEW)	+= pwm-sunxi-new.o
+obj-m	+= pwm-test.o
